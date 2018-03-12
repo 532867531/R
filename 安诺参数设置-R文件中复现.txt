@@ -1,0 +1,17 @@
+DEGseq::DEGexp(
+  #geneExpMatrix1 = as.matrix(t1c1_data[,c("Gene","T1_count")]),
+  #geneExpMatrix2 = as.matrix(t1c1_data[,c("Gene","C1_count")]),
+  geneExpMatrix1 = as.matrix(t1c1_data[,c("Gene","T2_count")]),
+  geneExpMatrix2 = as.matrix(t1c1_data[,c("Gene","C2_count")]),
+               #geneCol1 = 1,expCol1 = 2,
+               groupLabel1 = "T1_LABLE",
+               #geneCol2=1,expCol2 = 2,
+               groupLabel2 = "C1_LABLE",
+              rawCount = TRUE,##À∆∫ı”∞œÏ≤ª¥Û
+              normalMethod = "none",
+              method="MARS",
+              qValue = 0.05,
+              foldChange = 2,
+              thresholdKind = 5,
+              outputDir = outputDir_
+               )
