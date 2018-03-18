@@ -7,7 +7,13 @@ if(file.exists(file)){
   rna_data=read.csv(file=file,sep="")
 }
 
-index = duplicated(rna_seq_data$Hugo_Symbol)
-rna_seq_data_single = rna_seq_data[!index,]
+
+rna_seq_data=rna_seq_data[,-which(colnames(rna_seq_data)=="Entrez_Gene_Id")]
 library(dplyr)
-dplyr::group_by(rna_seq_data,)
+rna_seq_data=tbl_df(rna_seq_data)
+##选取基因
+geneSignatures=c("CXCR4","CXCR2","ITGAM","ITGAX","ANPEP","CD14","FUT4","CD33","CD34","CD38","ENTPD1","PTPRC","CEACAM8","CD80","CSF1R","IL4R","CSF3","CSF2","CXCL8","TNF","CXCL12","CSF1R","S100A8","S100A9","STAT1","STAT3","STAT5A","ARG1","NOS2","CD274","TLR3","TLR4","TGFB1","IL10","IDO1","PDCD1")
+reg=paste(geneSignatures,collapse = "|")
+data_signatire=rna_seq_data[which(!is.na(stringi::stri_match(rna_seq_data$Hugo_Symbol,regex = reg))),]
+##数据格式矫正
+
