@@ -1,0 +1,132 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE,fig.width=1000,fig.height=9000}
+knitr::opts_chunk$set(echo = TRUE)
+##读取数据ran_seq_median
+path="D:\\min数据\\tcga\\prad_tcga\\prad_tcga\\"
+file=paste(path,"data_RNA_Seq_v2_expression_median.RDS",sep="")
+useSymbol = TRUE
+#file=paste(path,"data_RNA_Seq_v2_mRNA_median_Zscores.RDS",sep="")
+if(file.exists(file)){
+  rna_seq_data=readRDS(file=file)
+}else{
+  rna_data=read.csv(file=sub(pattern =".RDS",replacement = ".txt",x=file),sep="")
+  saveRDS(rna_data,file=file)
+}
+
+library(dplyr)
+library(sqldf)
+
+##数据初步矫正去重，认为筛选的数据不在重复的基因中
+ifelse(useSymbol,{
+  d=duplicated(rna_seq_data$Hugo_Symbol);
+  rna_seq_data=rna_seq_data[!d,];
+  ("完成去重")
+},
+"跳过去重")
+##选取基因
+#geneSignatures=c("CXCR4","CXCR2","ITGAM","ITGAX","ANPEP","CD14","FUT4","CD33","CD34","CD38","ENTPD1","PTPRC","CEACAM8","CD80","CSF1R","IL4R","CSF3","CSF2","CXCL8","TNF","CXCL12","CSF1R","S100A8","S100A9","STAT1","STAT3","STAT5A","ARG1","NOS2","CD274","TLR3","TLR4","TGFB1","IL10","IDO1","PDCD1")
+#geneSignatures=c("CEACAM8","S100A8","S100A9","CXCR2","ID01","CSF2","CSF3","PDCD1","TNF","PTPRC","CD38","CD80","CD274","STAT1","CXCR4","CD34","ENTPD1","TGFB1","IL4R","STAT3","STAT5A","FUT4","ITGAX","ITGAM","CD14","CSF1R","CD33","TLR4","CXCL12","TLR3","ANPEP")
+geneSignatures=c("ANPEP","CD38","CSF3","CXCR2","CD80","IDO","SLEB2","CD274","PTPRC","TLR3","CEACAM8","STAT1","CXCR4","LOC116196","CSF1R","ITGAM","ITGAX","CD14","TGFB1","CXCL12","LOC199828","ENTPD1","FUT4","STAT3","IL4R","STAT5A","TLR4","CSF2","CXCL8","S100A8","S100A9","TNF")
+
+#reg=paste(geneSignatures,collapse = "|^")
+#data_signatire=rna_seq_data[which(!is.na(stringi::stri_match(rna_seq_data$Hugo_Symbol,regex = reg))),]
+#rna_seq_data=na.omit(rna_seq_data)
+ifelse(useSymbol,{
+  rna_seq_data=rna_seq_data[-which(is.na(rna_seq_data$Hugo_Symbol)),]
+  rownames(rna_seq_data)<-rna_seq_data$Hugo_Symbol;
+  "基因symbol应用完毕"
+},{
+  rownames(rna_seq_data)=rna_seq_data$Entrez_Gene_Id;
+  "基因ID应用完毕"
+})
+
+
+##数据格式矫正
+#rownames(data_signatire)=data_signatire$Hugo_Symbol
+# data_signatire=na.omit((data_signatire))
+data_signatire=rna_seq_data[geneSignatures,]
+tryCatch({
+  data_signatire=data_signatire[,-which(colnames(data_signatire)=="Entrez_Gene_Id")]
+  data_signatire=data_signatire[,-which(colnames(data_signatire)=="Hugo_Symbol")]
+},finally = {
+  "全部去除完毕!"
+})
+##查看未找到的名称
+rownames(data_signatire)=geneSignatures
+fix(data_signatire)
+print(summary(is.na(rownames(data_signatire))))
+# # 数据集群性评估，使用get_clust_tendency()计算Hopkins统计量
+# res = get_clust_tendency(data_signatire, 40, graph = TRUE)
+# res$hopkins_stat
+# win.graph();res$plot
+# ##由于k均值聚类需要指定要生成的聚类数量，因此我们将使用函数clusGap()来计算用于估计最优聚类数。函数fviz_gap_stat()用于可视化。
+# set.seed(123)
+# ## Compute the gap statistic
+# gap_stat = clusGap(data_signatire, FUN = kmeans, nstart = 25, K.max = 10, B = 500)
+# # Plot the result
+# win.graph();fviz_gap_stat(gap_stat)
+# ##对数据进行聚类分析
+# res.hc=eclust(data_signatire,FUNcluster = "hclust"
+#               ,hc_metric = "euclidean")
+# 
+#
+data_signatire=log2(data_signatire+1)
+fix(data_signatire)
+
+Cluster_Method<-c( "ward", "single", "complete", "average", "mcquitty", "median", "centroid")
+out_put_dir="D:\\min数据\\tcga\\prad_tcga\\analyse\\"
+goHeatMap=function(cluster_method){
+  myclust<-function(x){
+    hclust(x,method=cluster_method)
+  }
+  library("RColorBrewer")
+  library(gplots)
+  ##win.graph();
+  file=paste(out_put_dir,cluster_method,".tiff",sep="")
+  devices=dev.list()
+  #tiff(filename = file,width = 800, height = 800, units = "px")
+  hv=heatmap.2(as.matrix(data_signatire), col=rev( colorRampPalette(brewer.pal(11, "RdBu"))(256)[c((1+0):(128-20),(128+20):(256-0))]
+  ), scale="row",
+  distfun = dist,
+  hclustfun = myclust,
+  key=TRUE, keysize=1, symkey=FALSE, density.info="histogram", trace="none", cexRow=1,
+  Rowv=FALSE, Colv=TRUE,dendrogram = "column",lmat=rbind(c(0,3,0),c(2,1,0),c(0,4,0)) ,lhei=c(3,10,3),lwid=c(2,9,2)
+  ,key.title ="",cexCol = 1#,densadj = 0.25
+  ,sepcolor="white"
+  ,main = cluster_method
+  )
+ # dev.off()
+}
+
+
+
+for(one in Cluster_Method){
+  try(expr = {print(goHeatMap(one));},silent = TRUE)   
+  
+}
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
