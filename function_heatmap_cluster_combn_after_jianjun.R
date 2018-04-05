@@ -11,6 +11,7 @@ myDist<-function(x,distmethod){
   get_dist(x,method = distmethod)
 }
 
+
 # Function to average the expression of probesets which map to same gene
 probeset2genelevel = function (x){
   return(tapply(x, factor(x[,"Hugo_Symbol"], mean)))

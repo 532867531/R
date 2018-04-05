@@ -9,6 +9,7 @@ qqnorm(x);qqline(x)
 mtext("title",outer = TRUE)
 par(mfrow=c(1,1))
 }
+
 ##定义参数列表
 #getGene0="CXCL17"
 getGene0="CXCL5"

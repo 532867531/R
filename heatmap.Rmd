@@ -1,0 +1,247 @@
+---
+title: "lihc_heatmap"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r cars}
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE, fig.height=15, fig.width=20, message=FALSE, warning=FALSE}
+library(XML)
+XMLFILE_DIR="D:/min数据/tcga/lihc_tcga/pten-signature-literature/"
+setwd(XMLFILE_DIR)
+ALL_XML_FILES=list.files(XMLFILE_DIR,pattern = "*.xml",full.names = FALSE)
+
+##先改名
+for(oneFile in ALL_XML_FILES){
+  PARSED=xmlParse(file=oneFile,asTree = TRUE)
+  XML_ROOT=xmlRoot(x=PARSED)
+  XML_ROOT_ATTR=xmlAttrs(XML_ROOT)
+  print(XML_ROOT_ATTR)
+  GENESET_NAME=xmlGetAttr(XML_ROOT,name ="NAME")
+  file.rename(from = oneFile,to=paste(GENESET_NAME,".xml",sep=""))
+}
+
+
+##更新文件名称
+ALL_XML_FILES=list.files(XMLFILE_DIR,pattern = "*.xml",full.names = FALSE)
+##构建基因集合
+PATHWAY_GENE_LIST_GENENAME=list()
+PATHWAY_GENE_LIST_ENTREZ_ID=list()
+##先改名
+for(oneFile in ALL_XML_FILES){
+  PARSED=xmlParse(file=oneFile,asTree = TRUE)
+  XML_ROOT=xmlRoot(x=PARSED)
+  XML_CHILD=xmlChildren(XML_ROOT)
+  
+  XML_CHILD_ATT_LIST=as.list(xmlAttrs(node = XML_CHILD[[1]]))
+  library(stringi)
+  GENE_NAMES=stri_split(XML_CHILD_ATT_LIST$MEMBERS_SYMBOLIZED,regex = ",")
+  GENE_ETZ=stri_split(XML_CHILD_ATT_LIST$MEMBERS_EZID,regex = ",")
+  ##判基因是否都有entrez_ID
+  isAllHavaEntrezId=(length(GENE_ETZ)==length(GENE_NAMES))
+  message(c("是否都具有EntezId?",isAllHavaEntrezId))
+  ##装载进入PATHWAY_GENE_LIST
+  PATHWAY_GENE_LIST_GENENAME[XML_CHILD_ATT_LIST$STANDARD_NAME]=GENE_NAMES
+  PATHWAY_GENE_LIST_ENTREZ_ID[XML_CHILD_ATT_LIST$STANDARD_NAME]=GENE_ETZ
+}
+message(length(PATHWAY_GENE_LIST_GENENAME))
+
+##再读取通路基因
+########以下的文档引用自lihc_tcga_0.R
+##自定义距离函数和聚类函数以传入方法参数
+print("自定义聚类函数")
+library(factoextra)
+print("自定义距离函数")
+##自定义探索性分析函数
+EDA=function(x){
+  windows()
+  par(mfrow=c(3,2))
+  hist(x)
+  dotchart(x)
+  boxplot(x,horizontal = T)
+  qqnorm(x);qqline(x)
+  mtext("title",outer = TRUE)
+  par(mfrow=c(1,1))
+}
+##自定义参数列表
+    para_list=data.frame()
+    para_list["LOG2","VALUE"]=TRUE
+    para_list["SCALE","VALUE"]=TRUE
+    para_list["HEATMAP_ROWSCALE","VALUE"]=FALSE
+    
+    getGene0="ALL"
+    
+##输入数据文件夹
+##读取数据ran_seq_median
+path="D:\\min数据\\tcga\\lihc_tcga\\lihc_tcga\\"
+out_put_dir=paste(path,getGene0,"\\",sep="")
+label_Func_readInRnaSeqFile=function(){print("读入RNAseq表达数据！")}
+file=paste(path,list.files(path = path,pattern = "data.*?RNA_Seq.*?expression.*?median.*?txt"),sep="")
+#file=paste(path,list.files(path = path,pattern = "data.*?RNA_Seq.*?Zscores.*?txt"),sep="")
+
+RDSfile=sub(pattern = "txt",replacement = "RDS",perl=TRUE,x=file)
+library(data.table)
+#file=paste(path,"data_RNA_Seq_v2_mRNA_median_Zscores.RDS",sep="")
+if(file.exists(RDSfile)){
+  rna_seq_data=readRDS(file=RDSfile)
+}else{
+  rna_data=read.csv(file = file,sep = "\t")
+  saveRDS(rna_data,file=RDSfile)
+  rna_seq_data=readRDS(file=RDSfile)
+}
+if(data.class(rna_seq_data)!="data.table"){
+  rna_seq_data=data.table(rna_seq_data)
+}
+
+##rnaSEQ文件探针合并.max,average??
+##这里我们使用data.table的.SD方法
+receive=winDialogString(as.character(nrow(rna_seq_data)!=length(unique(rna_seq_data$Hugo_Symbol))),default = "发现重复基因名称")
+rna_seq_data=rna_seq_data[,lapply(.SD,max),by=.(Hugo_Symbol),.SDcols=colnames(rna_seq_data)[c(2:ncol(rna_seq_data))]]
+rna_seq_data=na.omit(as.data.frame(rna_seq_data))
+rownames(rna_seq_data)=rna_seq_data$Hugo_Symbol
+##选取基因
+useSymbol = FALSE
+pathWays=names(PATHWAY_GENE_LIST_GENENAME)
+selectedPathway=pathWays[6];
+ifelse(useSymbol,{
+  PTEN_geneSignatures=PATHWAY_GENE_LIST_GENENAME[[selectedPathway]]
+  geneSignatures=PTEN_geneSignatures    
+},{
+  PTEN_geneSignatures=PATHWAY_GENE_LIST_ENTREZ_ID[[selectedPathway]]
+  geneSignatures=PTEN_geneSignatures
+})
+
+#fix(rna_seq_data)
+head(rna_seq_data,1)
+ifelse(useSymbol,{
+  rna_seq_data=na.omit(rna_seq_data)
+  rownames(rna_seq_data)<-rna_seq_data$Hugo_Symbol;
+  "基因symbol应用完毕"
+},{
+  rna_seq_data=na.omit(rna_seq_data)
+  rownames(rna_seq_data)=rna_seq_data$Entrez_Gene_Id;
+  "基因ID应用完毕"
+})
+
+##开始获取signature基因
+data_signatire=rna_seq_data[geneSignatures,]
+##再把行名转换为基因名称
+rownames(data_signatire)=geneSignatures
+fix(data_signatire)
+data_signatire=na.omit(data_signatire)
+rownames(data_signatire)=data_signatire$Hugo_Symbol
+fix(data_signatire)
+tryCatch({
+  if("Entrez_Gene_Id" %in% colnames(data_signatire)){
+    data_signatire=data_signatire[,-which(colnames(data_signatire)=="Entrez_Gene_Id")]  
+  }
+  if("Hugo_Symbol" %in% colnames(data_signatire)){
+    data_signatire=data_signatire[,-which(colnames(data_signatire)=="Hugo_Symbol")]
+  }
+},finally = {
+  "全部去除完毕!"
+  #  write.csv(x=data_signatire,file = paste(out_put_dir,"tcga_signature.csv",sep=""))
+})
+
+print(summary(is.na(rownames(data_signatire))))
+#######开始根据参数生成输出文件夹
+##../signatureOfWhichGene/selectedpathway/
+out_put_dir=paste(out_put_dir,selectedPathway,"\\",sep="")
+label_Func_OutputDir=function(){print("打开输出文件文件夹！")}
+if(!dir.exists(out_put_dir)){
+  dir.create(recursive=TRUE,out_put_dir)
+}
+#保存数据
+imageFile=paste(out_put_dir,"image.Rdata",sep="")
+#save.image(file=imageFile)
+shell.exec(out_put_dir)
+###进行数据的预处理
+##探索性分析
+if(para_list["LOG2","VALUE"]){
+  {"是否进行log2处理"}
+  secondMin=min(as.matrix(data_signatire)[which(data_signatire!=0)])
+  data_signatire=log2(data_signatire+1)  
+  fix(data_signatire)
+}
+if(para_list["SCALE","VALUE"]){
+  data_signatire=as.data.frame(t(scale(t(data_signatire))))
+  fix(data_signatire)
+}
+
+#library(rattle)
+#rattle()
+##########
+##########进行热图绘制
+##########
+data_heatmap=na.omit(data_signatire)
+##计算break
+PERCENTILE=0.01;lowQ=as.numeric(quantile(unlist(data_heatmap),PERCENTILE,na.rm = TRUE));highQ=as.numeric(quantile(unlist(data_heatmap),1-PERCENTILE,na.rm = TRUE))
+BREAKS=na.omit(c(min(data_heatmap)-0.01,seq(lowQ,highQ,0.05),max(data_heatmap)+0.01))
+goHeatMap=function(cluster_method,dist_method){
+heatmap_2=TRUE
+if(heatmap_2){
+  ##主要的绘图函数
+  library(gplots)
+  #win.graph()
+  myclust<-function(x){
+    hclust(x,method=cluster_method)
+  }
+  myDist<-function(x){
+    get_dist(x,method = dist_method)
+  }
+  hm=heatmap.2(x=as.matrix(data_heatmap),col=colorRampPalette(c("blue", "white", "red"))(length(BREAKS)-1),
+               distfun=myDist,hclustfun=myclust,
+               #hm=heatmap.2(x=as.matrix(d1),col=colorRampPalette(c("blue", "white", "red"))(256), distfun=myDist,hclustfun=myclust,
+               scale="none",
+               trace="none",
+               dendrogram = "column",
+               Rowv = TRUE,
+               Colv = TRUE,
+               sepcolor = "white",
+               symkey = TRUE,
+               #breaks = c(min(d1)-0.05,seq(-3,3,0.005),max(d1)+0.05)
+               # breaks = c(min(d1)-0.5,seq(-3,3,0.005),max(d1)+0.5)
+               breaks = BREAKS,
+               densadj=0.01,
+               main = paste("hclust_method",cluster_method,"dist_method",dist_method,sep="_"),
+               lmat=rbind(c(0,3,0),c(0,1,2),c(0,4,0)) ,lhei=c(3,10,3),lwid=c(1,9,1)
+  )
+  try(knitr::normal_print(hm),silent = TRUE)
+}
+}
+
+Cluster_Method<-c( "ward.D","ward.D2","single","complete","average" ,"mcquitty","median","centroid")
+Dist_Methods<-  c("euclidean"
+                  , "maximum", "manhattan", 
+                  "canberra", 
+                  "binary", "minkowski", "pearson", "spearman","kendall"
+)
+```
+
+
+```{r plot figu, fig.height=20, fig.width=20, message=FALSE, warning=FALSE}
+for(dist_method in Dist_Methods){
+  for(cluster_method in Cluster_Method){
+    goHeatMap(dist_method = dist_method,cluster_method = cluster_method)
+  }
+}
+
+
+
+```
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
